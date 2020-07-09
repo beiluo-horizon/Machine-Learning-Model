@@ -128,8 +128,92 @@ class MY_SVM:
         self.predict_label = predict_label
         
         return self.predict_label
+    
+    def getW (self):
+        '''
+        Returns
+        -------
+        W : folat64
+            求距离超平面公式所需要的范数.
+
+        '''
+        Classifier = self.Svm
+        SvDict = Classifier.support_vectors_     #支持向量列表
+        SvCoef = Classifier.dual_coef_#二次规划求解得到的最小值
+        MaxKey = SvDict.shape[1]    #求得支持向量的特征数
+        
+        SvCoefNd = SvCoef.reshape(-1,1)
+        SvNd = []
+        for d in range(SvDict.shape[0]):
+            tmp = []
+            for i in range(0,MaxKey):
+                    tmp.append(SvDict[d,i])
+            SvNd.append(tmp)
+        SvNd = np.array(SvNd)
+        W = np.dot(SvNd.T,SvCoefNd)
+        return W
+    
+    def distance(self,test_data,AbsFlag = True):
+        '''
+        Parameters
+        ----------
+        test_data : Array
+            测试数据集.
+
+        Returns
+        -------
+        距离值.
+
+        '''
+        Classifier = self.Svm
+        normalize = self.normalize
+        scaler = self.Scaler
+        
+        testDataScale = test_data
+        if normalize is True:
+            testDataScale = scaler.transform(test_data)
+              
+        decision_value = Classifier.decision_function(testDataScale)
+
+        W = self.getW()
+        
+        if AbsFlag == True:
+            Distance = np.divide(abs(np.array(decision_value)),np.linalg.norm(W,ord=2))
+        else:
+            Distance = np.divide(np.array(decision_value),np.linalg.norm(W,ord=2))
+        return Distance
+       
+    
 
 
         
 if __name__ == '__main__':
-     pass
+    from sklearn.model_selection import StratifiedKFold
+    import result
+    import pandas as pd
+    param = '-s 0 -t 2 -d 3 -g 10 -r 0.0 -c 400 -e 0.0001 -m 200 -b 1'
+    Classifier = MY_SVM(normalize=True,C=10,gamma = 10,kernel = 'rbf')
+    
+    path = r'E:\MyCodeWork\图像评价\代码\数据\0703中等数据无参考29特征带真实标签\NoReferenceFeature.csv'
+    s = pd.read_csv(path,index_col=0)
+    Cols = [i for i in s.columns if i not in ['labelFD','labelFC']]
+    train = np.array(s[Cols].values)
+    label = np.array(s['labelFD'])
+    skf = StratifiedKFold(n_splits = 5,shuffle=True)
+    Predict_Label = []
+    Label_CV = []
+    for train_index,test_index in skf.split(train,label):
+        train_data,test_data = train[train_index],train[test_index]
+        train_label,test_label = label[train_index],label[test_index]
+        
+        Classifier.fit(train_data,train_label)
+        Predict = Classifier.predict(test_data)
+        Predict_Label.append(Predict)
+        Label_CV.append(test_label)
+    result.score_analyse_(Predict_Label,Label_CV,model = 'CV',CV_parameter = 5)
+    
+    #%% 测试SV Coef
+    SkSVM = MY_SVM(normalize=True,C=10,gamma = 10,kernel = 'rbf')
+    SkSVM.fit(train,label)
+    Sv = SkSVM.Svm.support_vectors_
+    Coef = SkSVM.Svm.dual_coef_
